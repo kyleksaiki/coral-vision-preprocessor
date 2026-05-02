@@ -1,6 +1,8 @@
 import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.Scalar;
+import org.opencv.core.Size;
+import org.opencv.imgproc.CLAHE;
 import org.opencv.imgproc.Imgproc;
 
 import java.util.ArrayList;
@@ -12,16 +14,23 @@ public class CardCleaner {
         // First thing: equalize each BGR, HSV channel separately
         Mat bgrEqualized = equalizeBgrChannels(warpedRaw);
         Mat hsvEqualized = equalizeHsvChannels(warpedRaw);
+        Mat labEqualized = equalizeLabChannels(warpedRaw);
+        Mat labCLAHE = claheLab(warpedRaw);
 
         // Run labelers on equalized image
         char[][] bgrLabels = labelPixels(bgrEqualized);
         char[][] hsvLabels = labelPixels(hsvEqualized);
+        char[][] labLabels = labelPixels(labEqualized);
+        char[][] labCLAHELabels = labelPixels(labCLAHE);
 
-        CardResult[] results = new CardResult[2];
+
+        CardResult[] results = new CardResult[4];
         // Use original image for final background estimation and output
         results[0] = estimateBGandResult(hsvLabels, hsvEqualized, warpedRaw, "HSV");
         results[1] = estimateBGandResult(bgrLabels, bgrEqualized, warpedRaw, "BGR");
-
+        results[2] = estimateBGandResult(labLabels, bgrEqualized, warpedRaw, "LAB");
+        results[3] = estimateBGandResult(labCLAHELabels, bgrEqualized, warpedRaw, "CLAHElab");
+        
         return results;
     }
 
@@ -106,6 +115,48 @@ public class CardCleaner {
         Imgproc.cvtColor(equalized, equalized, Imgproc.COLOR_HSV2BGR);
         return equalized;
     }
+
+    //only equalizes lightness
+    private static Mat equalizeLabChannels(Mat bgr) {
+        List<Mat> channels = new ArrayList<>(3);
+        Mat lab = new Mat();
+        Imgproc.cvtColor(bgr, lab, Imgproc.COLOR_BGR2Lab);
+        Core.split(lab, channels);
+
+        Mat lEq = new Mat(); //likely harmful if equalized
+        Mat a = channels.get(1);
+        Mat b = channels.get(2);
+
+        Imgproc.equalizeHist(channels.get(0), lEq);
+
+        Mat equalized = new Mat();
+        List<Mat> merged = new ArrayList<>(3);
+        merged.add(lEq);
+        merged.add(a);
+        merged.add(b);
+        Core.merge(merged, equalized);
+
+        Imgproc.cvtColor(equalized, equalized, Imgproc.COLOR_Lab2BGR);
+        return equalized;
+    }
+
+    //clahe lightness
+    private static Mat claheLab(Mat bgr) {
+        List<Mat> channels = new ArrayList<>(3);
+        Mat lab = new Mat();
+        Imgproc.cvtColor(bgr, lab, Imgproc.COLOR_BGR2Lab);
+        Core.split(lab, channels);
+
+        CLAHE clahe = Imgproc.createCLAHE(2.0, new Size(8,8));
+        clahe.apply(channels.get(0), channels.get(0));
+
+        Mat equalized = new Mat();
+        Core.merge(channels, equalized);
+
+        Imgproc.cvtColor(equalized, equalized, Imgproc.COLOR_Lab2BGR);
+        return equalized;
+    }
+
 
     private static Mat processLabels(Mat source, char[][] labels, Scalar backgroundColor) {
         Mat output = source.clone();
