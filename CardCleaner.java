@@ -8,13 +8,40 @@ import java.util.List;
 
 public class CardCleaner {
 
-    public static CardResult processCard(Mat warpedRaw) {
-        int rows = warpedRaw.rows();
-        int cols = warpedRaw.cols();
+    public static CardResult[] processCard(Mat warpedRaw) {
+        // First thing: equalize each BGR, HSV channel separately
+        Mat bgrEqualized = equalizeBgrChannels(warpedRaw);
+        Mat hsvEqualized = equalizeHsvChannels(warpedRaw);
 
-        // First thing: equalize each BGR channel separately
-        Mat equalized = equalizeBgrChannels(warpedRaw);
+        // Run labelers on equalized image
+        char[][] bgrLabels = labelPixels(bgrEqualized);
+        char[][] hsvLabels = labelPixels(hsvEqualized);
 
+        CardResult[] results = new CardResult[2];
+        // Use original image for final background estimation and output
+        results[0] = estimateBGandResult(hsvLabels, hsvEqualized, warpedRaw, "HSV");
+        results[1] = estimateBGandResult(bgrLabels, bgrEqualized, warpedRaw, "BGR");
+
+        return results;
+    }
+
+    public static CardResult estimateBGandResult(char[][] labels, Mat equalized, Mat warpedRaw, String colorSpace) {
+        // Use original image for final background estimation and output
+        Scalar backgroundColor = BackgroundColorEstimator.estimateBackgroundColor(warpedRaw, labels);
+        Mat corrected = processLabels(equalized, labels, backgroundColor);
+
+        CardResult result = new CardResult();
+        result.corrected = corrected;
+        result.labels = labels;
+        result.warpedRaw = warpedRaw;
+        result.colorSpace = colorSpace;
+        
+        return result;
+    } 
+
+    public static char[][] labelPixels(Mat equalized) {
+        int rows = equalized.rows();
+        int cols = equalized.cols();
         char[][] labels = new char[rows][cols];
 
         // Initialize everything to '.'
@@ -23,29 +50,19 @@ public class CardCleaner {
                 labels[r][c] = '.';
             }
         }
-
-        // Run labelers on equalized image
         labels = LabelCoral.labelCoralPixels(equalized, labels);
         labels = LabelAlgae.labelAlgaePixels(equalized, labels);
         labels = LabelSilt.labelSiltPixels(equalized, labels);
-
         // labels = LabelShadow.labelShadowPixels(equalized, labels);
 
-        // Use original image for final background estimation and output
-        Scalar backgroundColor = BackgroundColorEstimator.estimateBackgroundColor(warpedRaw, labels);
-        Mat corrected = processLabels(equalized, labels, backgroundColor);
-
-        CardResult result = new CardResult();
-        result.warpedRaw = equalized.clone();
-        result.corrected = corrected;
-        result.labels = labels;
-
-        return result;
+        return labels;
     }
 
     private static Mat equalizeBgrChannels(Mat bgr) {
         List<Mat> channels = new ArrayList<>(3);
-        Core.split(bgr, channels);
+        Mat nbgr = bgr.clone();
+
+        Core.split(nbgr, channels);
 
         Mat bEq = new Mat();
         Mat gEq = new Mat();
@@ -62,6 +79,31 @@ public class CardCleaner {
         merged.add(rEq);
         Core.merge(merged, equalized);
 
+        return equalized;
+    }
+
+    //only equalizes saturation and value
+    private static Mat equalizeHsvChannels(Mat bgr) {
+        List<Mat> channels = new ArrayList<>(3);
+        Mat hsv = new Mat();
+        Imgproc.cvtColor(bgr, hsv, Imgproc.COLOR_BGR2HSV);
+        Core.split(hsv, channels);
+
+        Mat h = channels.get(0); //likely harmful if equalized
+        Mat sEq = new Mat();
+        Mat vEq = new Mat();
+
+        Imgproc.equalizeHist(channels.get(1), sEq);
+        Imgproc.equalizeHist(channels.get(2), vEq);
+
+        Mat equalized = new Mat();
+        List<Mat> merged = new ArrayList<>(3);
+        merged.add(h);
+        merged.add(sEq);
+        merged.add(vEq);
+        Core.merge(merged, equalized);
+
+        Imgproc.cvtColor(equalized, equalized, Imgproc.COLOR_HSV2BGR);
         return equalized;
     }
 
@@ -113,5 +155,6 @@ public class CardCleaner {
         public Mat warpedRaw;
         public Mat corrected;
         public char[][] labels;
+        public String colorSpace;
     }
 }

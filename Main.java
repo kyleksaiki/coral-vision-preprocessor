@@ -59,17 +59,23 @@ public class Main {
         }
 
         // Run the card-cleaning pipeline on this already-cropped card image.
-        CardCleaner.CardResult result = CardCleaner.processCard(raw);
+        CardCleaner.CardResult results[] = CardCleaner.processCard(raw);
 
         // Make a per-card folder name using the input order and original file name.
         String baseName = stripExtension(imagePath.getFileName().toString());
         Path cardDir = cardsDir.resolve(String.format(Locale.US, "card_%02d_%s", index, baseName));
         Files.createDirectories(cardDir);
 
-        // Save the original card and cleaned result side by side.
-        Imgcodecs.imwrite(cardDir.resolve("raw.png").toString(), result.warpedRaw);
-        Imgcodecs.imwrite(cardDir.resolve("clean.png").toString(), result.corrected);
+        for (CardCleaner.CardResult result: results) {
+            // System.out.println("result.warpedRaw exists " + (result.warpedRaw != null));
+            // System.out.println("result.corrected exists " + (result.corrected != null));
+            String rawName = String.format("raw.png");
+            String cleanName = String.format("clean_%s.png", result.colorSpace);
 
+            // Save the original card and cleaned result side by side.
+            Imgcodecs.imwrite(cardDir.resolve(rawName).toString(), result.warpedRaw);
+            Imgcodecs.imwrite(cardDir.resolve(cleanName).toString(), result.corrected);
+        }
         System.out.printf(Locale.US, "Processed %s -> %s%n", imagePath.getFileName(), cardDir.getFileName());
     }
 
