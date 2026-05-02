@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Launch Main",
+      "request": "launch",
+      "mainClass": "Main",
+      "vmArgs": "-Djava.library.path=C:\\OpenCV\\opencv\\build\\java\\x64",
+      "args": "output input\\test_01.jpg input\\test_02.jpg input\\test_03.jpg input\\test_04.jpg input\\test_05.jpg input\\test_06.jpg"
+    }
+  ]
+}

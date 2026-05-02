@@ -13,7 +13,7 @@ public class Main {
     // Load the OpenCV native library one time when the class gets loaded.
     // If this is missing, OpenCV image I/O and processing calls will fail.
     static {
-        System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
+        System.load("C:\\OpenCV\\opencv\\build\\java\\x64\\opencv_java4120.dll");//Core.NATIVE_LIBRARY_NAME);
     }
 
     public static void main(String[] args) throws IOException {
