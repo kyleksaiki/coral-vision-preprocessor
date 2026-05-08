@@ -7,7 +7,7 @@
       "request": "launch",
       "mainClass": "Main",
       "vmArgs": "-Djava.library.path=C:\\OpenCV\\opencv\\build\\java\\x64",
-      "args": "output input\\test_01.jpg input\\test_02.jpg input\\test_03.jpg input\\test_04.jpg input\\test_05.jpg input\\test_06.jpg input\\clean_HSV_01.png input\\clean_HSV_02.png input\\clean_HSV_03.png input\\clean_HSV_04.png input\\clean_HSV_05.png input\\clean_HSV_06.png"
+      "args": "output input\\T-101_DHEL-11__DHEL-12_20240829_BROOD.JPG input\\test_01.jpg input\\test_02.jpg input\\test_03.jpg input\\test_04.jpg input\\test_05.jpg input\\test_06.jpg input\\clean_HSV_01.png input\\clean_HSV_02.png input\\clean_HSV_03.png input\\clean_HSV_04.png input\\clean_HSV_05.png input\\clean_HSV_06.png"
     }
   ]
 }

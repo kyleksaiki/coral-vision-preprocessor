@@ -66,15 +66,18 @@ public class Main {
         Path cardDir = cardsDir.resolve(String.format(Locale.US, "card_%02d_%s", index, baseName));
         Files.createDirectories(cardDir);
 
+        String rawName = String.format("raw.png");
+        Imgcodecs.imwrite(cardDir.resolve(rawName).toString(), raw);
+
         for (CardCleaner.CardResult result: results) {
             // System.out.println("result.warpedRaw exists " + (result.warpedRaw != null));
             // System.out.println("result.corrected exists " + (result.corrected != null));
-            String rawName = String.format("raw.png");
-            String cleanName = String.format("clean_%s.png", result.colorSpace);
+            if (result != null) {
+                String cleanName = String.format("clean_%s.png", result.method);
 
-            // Save the original card and cleaned result side by side.
-            Imgcodecs.imwrite(cardDir.resolve(rawName).toString(), result.warpedRaw);
-            Imgcodecs.imwrite(cardDir.resolve(cleanName).toString(), result.corrected);
+                // Save the original card and cleaned result side by side.
+                Imgcodecs.imwrite(cardDir.resolve(cleanName).toString(), result.corrected);
+            }
         }
         System.out.printf(Locale.US, "Processed %s -> %s%n", imagePath.getFileName(), cardDir.getFileName());
     }
