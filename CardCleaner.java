@@ -15,10 +15,6 @@ public class CardCleaner {
         // CLAHE + white balance happen in their own file.
         Mat claheWhiteBalanced = CardLightingNormalizer.claheLabThenWhiteBalance(warpedRaw);
 
-        // STEP 2:
-        // Color separation happens in its own file.
-        Mat colorSeparated = CardColorSeparator.enhanceColorSeparation(claheWhiteBalanced);
-
         char[][] labels = new char[rows][cols];
 
         // Initialize everything to '.'
@@ -29,21 +25,20 @@ public class CardCleaner {
         }
 
         // Coral must run first so algae/silt/shadow cannot overwrite it.
-        labels = LabelCoral.labelCoralPixels(colorSeparated, labels);
+        labels = LabelCoral.labelCoralPixels(claheWhiteBalanced, labels);
 
         // Non-coral distraction labelers run after coral.
         // These should not override coral pixels.
-        labels = LabelAlgae.labelAlgaePixels(colorSeparated, labels);
-        labels = LabelSilt.labelSiltPixels(colorSeparated, labels);
-        labels = LabelShadow.labelShadowPixels(colorSeparated, labels);
+        labels = LabelAlgae.labelAlgaePixels(claheWhiteBalanced, labels);
+        labels = LabelSilt.labelSiltPixels(claheWhiteBalanced, labels);
+        labels = LabelShadow.labelShadowPixels(claheWhiteBalanced, labels);
 
         // Replace removable labels with fixed dim white.
-        Mat corrected = processLabels(colorSeparated, labels, DIM_WHITE);
+        Mat corrected = processLabels(claheWhiteBalanced, labels, DIM_WHITE);
 
         CardResult result = new CardResult();
         result.rawInput = warpedRaw.clone();
         result.claheWhiteBalanced = claheWhiteBalanced.clone();
-        result.colorSeparated = colorSeparated.clone();
         result.corrected = corrected;
         result.labels = labels;
 
@@ -102,7 +97,6 @@ public class CardCleaner {
     public static class CardResult {
         public Mat rawInput;
         public Mat claheWhiteBalanced;
-        public Mat colorSeparated;
         public Mat corrected;
         public char[][] labels;
     }
