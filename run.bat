@@ -13,7 +13,7 @@ mkdir output\cards
 del /q *.class 2>nul
 del /q bin\*.class 2>nul
 
-javac -d bin -cp ".;C:\Users\kylek\OneDrive\Desktop\Coral_Vision\opencv\build\java\opencv-4120.jar" Main.java CardCleaner.java CardLightingNormalizer.java LabelCoral.java LabelAlgae.java LabelSilt.java LabelShadow.java
+javac -d bin -cp ".;C:\Users\kylek\OneDrive\Desktop\Coral_Vision\opencv\build\java\opencv-4120.jar" Main.java CardCleaner.java CardLightingNormalizer.java LabelCoral.java LabelAlgae.java LabelSilt.java 
 
 if errorlevel 1 (
     echo.
