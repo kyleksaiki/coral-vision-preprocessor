@@ -31,8 +31,7 @@ public class CardCleaner {
         // These should not override coral pixels.
         labels = LabelAlgae.labelAlgaePixels(claheWhiteBalanced, labels);
         labels = LabelSilt.labelSiltPixels(claheWhiteBalanced, labels);
-        labels = LabelShadow.labelShadowPixels(claheWhiteBalanced, labels);
-
+    
         // Replace removable labels with fixed dim white.
         Mat corrected = processLabels(claheWhiteBalanced, labels, DIM_WHITE);
 
