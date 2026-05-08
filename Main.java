@@ -19,10 +19,10 @@ public class Main {
     public static void main(String[] args) throws IOException {
         // Expect:
         // args[0] = output folder
-        // args[1...] = one or more cropped card image paths
+        // args[1...] = one or more input image paths
         if (args.length < 2) {
             System.out.println(
-                    "Usage: java -Djava.library.path=/path/to/opencv/native -cp .:opencv-4xx.jar CroppedCardBatchProcessor <output-dir> <card1> <card2> ...");
+                    "Usage: java -Djava.library.path=/path/to/opencv/native -cp .:opencv-4xx.jar Main <output-dir> <image1> <image2> ...");
             System.out.println("On Windows, replace ':' with ';' in the classpath.");
             return;
         }
@@ -58,7 +58,7 @@ public class Main {
             throw new IOException("Could not read image: " + imagePath);
         }
 
-        // Run the card-cleaning pipeline on this already-cropped card image.
+        // Run the card-cleaning pipeline.
         CardCleaner.CardResult result = CardCleaner.processCard(raw);
 
         // Make a per-card folder name using the input order and original file name.
@@ -66,9 +66,11 @@ public class Main {
         Path cardDir = cardsDir.resolve(String.format(Locale.US, "card_%02d_%s", index, baseName));
         Files.createDirectories(cardDir);
 
-        // Save the original card and cleaned result side by side.
-        Imgcodecs.imwrite(cardDir.resolve("raw.png").toString(), result.warpedRaw);
-        Imgcodecs.imwrite(cardDir.resolve("clean.png").toString(), result.corrected);
+        // Save every stage with numbered names so they appear in order:
+        // raw -> clahe -> color separation -> clean
+        Imgcodecs.imwrite(cardDir.resolve("01_raw.png").toString(), result.rawInput);
+        Imgcodecs.imwrite(cardDir.resolve("02_clahe_white_balance.png").toString(), result.claheWhiteBalanced);
+        Imgcodecs.imwrite(cardDir.resolve("03_clean.png").toString(), result.corrected);
 
         System.out.printf(Locale.US, "Processed %s -> %s%n", imagePath.getFileName(), cardDir.getFileName());
     }

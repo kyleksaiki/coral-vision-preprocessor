@@ -1,60 +1,61 @@
 import org.opencv.core.Mat;
 import org.opencv.core.Scalar;
-import org.opencv.imgproc.Imgproc;
 
 public class CardCleaner {
+
+    // Fixed replacement color for removable non-coral pixels.
+    // OpenCV uses BGR order, so this is dim white / light gray.
+    private static final Scalar DIM_WHITE = new Scalar(220, 220, 220);
 
     public static CardResult processCard(Mat warpedRaw) {
         int rows = warpedRaw.rows();
         int cols = warpedRaw.cols();
 
-        // One label per pixel. Starts empty, then each pass fills things in.
+        // STEP 1:
+        // CLAHE + white balance happen in their own file.
+        Mat claheWhiteBalanced = CardLightingNormalizer.claheLabThenWhiteBalance(warpedRaw);
+
         char[][] labels = new char[rows][cols];
 
-        // Start everything as unlabeled.
+        // Initialize everything to '.'
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 labels[r][c] = '.';
             }
         }
 
-        // Run the labeling passes in order.
-        // Coral first so other passes can avoid wiping it out.
-        labels = LabelCoral.labelCoralPixels(warpedRaw, labels);
-        labels = LabelAlgae.labelAlgaePixels(warpedRaw, labels);
-        labels = LabelSilt.labelSiltPixels(warpedRaw, labels);
-        labels = LabelShadow.labelShadowPixels(warpedRaw, labels);
+        // Coral must run first so algae/silt/shadow cannot overwrite it.
+        labels = LabelCoral.labelCoralPixels(claheWhiteBalanced, labels);
 
-        // Estimate a card-like background color from the remaining unlabeled area.
-        Scalar backgroundColor = BackgroundColorEstimator.estimateBackgroundColor(warpedRaw, labels);
+        // Non-coral distraction labelers run after coral.
+        // These should not override coral pixels.
+        labels = LabelAlgae.labelAlgaePixels(claheWhiteBalanced, labels);
+        labels = LabelSilt.labelSiltPixels(claheWhiteBalanced, labels);
+        labels = LabelShadow.labelShadowPixels(claheWhiteBalanced, labels);
 
-        // Build the cleaned image by replacing unwanted labels with that background
-        // color.
-        Mat corrected = processLabels(warpedRaw, labels, backgroundColor);
+        // Replace removable labels with fixed dim white.
+        Mat corrected = processLabels(claheWhiteBalanced, labels, DIM_WHITE);
 
         CardResult result = new CardResult();
-        result.warpedRaw = warpedRaw.clone();
+        result.rawInput = warpedRaw.clone();
+        result.claheWhiteBalanced = claheWhiteBalanced.clone();
         result.corrected = corrected;
         result.labels = labels;
 
         return result;
     }
 
-    private static Mat processLabels(Mat source, char[][] labels, Scalar backgroundColor) {
-        // Work on a copy so the source image stays untouched.
+    private static Mat processLabels(Mat source, char[][] labels, Scalar replacementColor) {
         Mat output = source.clone();
 
         int rows = output.rows();
         int cols = output.cols();
         int channels = output.channels();
 
-        // Turn the estimated background color into regular byte-safe values.
-        int bgB = clampToByte((int) Math.round(backgroundColor.val[0]));
-        int bgG = clampToByte((int) Math.round(backgroundColor.val[1]));
-        int bgR = clampToByte((int) Math.round(backgroundColor.val[2]));
+        int bgB = clampToByte((int) Math.round(replacementColor.val[0]));
+        int bgG = clampToByte((int) Math.round(replacementColor.val[1]));
+        int bgR = clampToByte((int) Math.round(replacementColor.val[2]));
 
-        // Pull image data into one flat byte array for faster pixel edits.
-        // This is a lot faster than using the matrix calls for each value in matrix
         byte[] data = new byte[(int) (output.total() * channels)];
         output.get(0, 0, data);
 
@@ -62,28 +63,26 @@ public class CardCleaner {
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
 
-                // Anything marked as algae, silt, or shadow gets painted over
-                // with the estimated background color.
-                if (labels[r][c] == 'A' || labels[r][c] == 'S' || labels[r][c] == 'H') {
+                char label = labels[r][c];
+
+                // Replace algae, silt, and shadow with dim white.
+                if (label == 'A' || label == 'a'
+                        || label == 'S' || label == 's'
+                        || label == 'H' || label == 'h') {
+
                     data[index] = (byte) bgB;
                     data[index + 1] = (byte) bgG;
                     data[index + 2] = (byte) bgR;
                 }
-
                 /*
-                 * Optional debug block:
-                 * if you want to draw coral in black instead of leaving it alone,
-                 * uncomment this.
-                 *
-                 * else if (labels[r][c] == 'C') {
-                 * data[index] = (byte) 0; // B
+                 * else if (label == 'C') {
+                 * data[index] = (byte) 128; // B
                  * data[index + 1] = (byte) 0; // G
-                 * data[index + 2] = (byte) 0; // R
+                 * data[index + 2] = (byte) 128; // R
                  * }
                  */
 
-                // Move to the next pixel in the flat BGR byte array.
-                index += 3;
+                index += channels;
             }
         }
 
@@ -92,18 +91,13 @@ public class CardCleaner {
     }
 
     private static int clampToByte(int value) {
-        // Keeps values inside the valid image byte range.
         return Math.max(0, Math.min(255, value));
     }
 
     public static class CardResult {
-        // Original cropped card image.
-        public Mat warpedRaw;
-
-        // Final cleaned image after unwanted stuff is painted over.
+        public Mat rawInput;
+        public Mat claheWhiteBalanced;
         public Mat corrected;
-
-        // Per-pixel labels from the pipeline.
         public char[][] labels;
     }
 }
