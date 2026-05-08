@@ -1,19 +1,23 @@
-import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.Scalar;
-import org.opencv.imgproc.Imgproc;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class CardCleaner {
+
+    // Fixed replacement color for removable non-coral pixels.
+    // OpenCV uses BGR order, so this is dim white / light gray.
+    private static final Scalar DIM_WHITE = new Scalar(220, 220, 220);
 
     public static CardResult processCard(Mat warpedRaw) {
         int rows = warpedRaw.rows();
         int cols = warpedRaw.cols();
 
-        // First thing: equalize each BGR channel separately
-        Mat equalized = equalizeBgrChannels(warpedRaw);
+        // STEP 1:
+        // CLAHE + white balance happen in their own file.
+        Mat claheWhiteBalanced = CardLightingNormalizer.claheLabThenWhiteBalance(warpedRaw);
+
+        // STEP 2:
+        // Color separation happens in its own file.
+        Mat colorSeparated = CardColorSeparator.enhanceColorSeparation(claheWhiteBalanced);
 
         char[][] labels = new char[rows][cols];
 
@@ -24,57 +28,38 @@ public class CardCleaner {
             }
         }
 
-        // Run labelers on equalized image
-        labels = LabelCoral.labelCoralPixels(equalized, labels);
-        labels = LabelAlgae.labelAlgaePixels(equalized, labels);
-        labels = LabelSilt.labelSiltPixels(equalized, labels);
+        // Coral must run first so algae/silt/shadow cannot overwrite it.
+        labels = LabelCoral.labelCoralPixels(colorSeparated, labels);
 
-        // labels = LabelShadow.labelShadowPixels(equalized, labels);
+        // Non-coral distraction labelers run after coral.
+        // These should not override coral pixels.
+        labels = LabelAlgae.labelAlgaePixels(colorSeparated, labels);
+        labels = LabelSilt.labelSiltPixels(colorSeparated, labels);
+        labels = LabelShadow.labelShadowPixels(colorSeparated, labels);
 
-        // Use original image for final background estimation and output
-        Scalar backgroundColor = BackgroundColorEstimator.estimateBackgroundColor(warpedRaw, labels);
-        Mat corrected = processLabels(equalized, labels, backgroundColor);
+        // Replace removable labels with fixed dim white.
+        Mat corrected = processLabels(colorSeparated, labels, DIM_WHITE);
 
         CardResult result = new CardResult();
-        result.warpedRaw = equalized.clone();
+        result.rawInput = warpedRaw.clone();
+        result.claheWhiteBalanced = claheWhiteBalanced.clone();
+        result.colorSeparated = colorSeparated.clone();
         result.corrected = corrected;
         result.labels = labels;
 
         return result;
     }
 
-    private static Mat equalizeBgrChannels(Mat bgr) {
-        List<Mat> channels = new ArrayList<>(3);
-        Core.split(bgr, channels);
-
-        Mat bEq = new Mat();
-        Mat gEq = new Mat();
-        Mat rEq = new Mat();
-
-        Imgproc.equalizeHist(channels.get(0), bEq);
-        Imgproc.equalizeHist(channels.get(1), gEq);
-        Imgproc.equalizeHist(channels.get(2), rEq);
-
-        Mat equalized = new Mat();
-        List<Mat> merged = new ArrayList<>(3);
-        merged.add(bEq);
-        merged.add(gEq);
-        merged.add(rEq);
-        Core.merge(merged, equalized);
-
-        return equalized;
-    }
-
-    private static Mat processLabels(Mat source, char[][] labels, Scalar backgroundColor) {
+    private static Mat processLabels(Mat source, char[][] labels, Scalar replacementColor) {
         Mat output = source.clone();
 
         int rows = output.rows();
         int cols = output.cols();
         int channels = output.channels();
 
-        int bgB = clampToByte((int) Math.round(backgroundColor.val[0]));
-        int bgG = clampToByte((int) Math.round(backgroundColor.val[1]));
-        int bgR = clampToByte((int) Math.round(backgroundColor.val[2]));
+        int bgB = clampToByte((int) Math.round(replacementColor.val[0]));
+        int bgG = clampToByte((int) Math.round(replacementColor.val[1]));
+        int bgR = clampToByte((int) Math.round(replacementColor.val[2]));
 
         byte[] data = new byte[(int) (output.total() * channels)];
         output.get(0, 0, data);
@@ -83,21 +68,26 @@ public class CardCleaner {
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
 
-                if (labels[r][c] == 'A' || labels[r][c] == 'S' || labels[r][c] == 'H') {
+                char label = labels[r][c];
+
+                // Replace algae, silt, and shadow with dim white.
+                if (label == 'A' || label == 'a'
+                        || label == 'S' || label == 's'
+                        || label == 'H' || label == 'h') {
+
                     data[index] = (byte) bgB;
                     data[index + 1] = (byte) bgG;
                     data[index + 2] = (byte) bgR;
                 }
-
                 /*
-                 * else if (labels[r][c] == 'C') {
-                 * data[index] = (byte) 0; // B
+                 * else if (label == 'C') {
+                 * data[index] = (byte) 128; // B
                  * data[index + 1] = (byte) 0; // G
-                 * data[index + 2] = (byte) 0; // R
+                 * data[index + 2] = (byte) 128; // R
                  * }
                  */
 
-                index += 3;
+                index += channels;
             }
         }
 
@@ -110,7 +100,9 @@ public class CardCleaner {
     }
 
     public static class CardResult {
-        public Mat warpedRaw;
+        public Mat rawInput;
+        public Mat claheWhiteBalanced;
+        public Mat colorSeparated;
         public Mat corrected;
         public char[][] labels;
     }

@@ -13,7 +13,8 @@ mkdir output\cards
 del /q *.class 2>nul
 del /q bin\*.class 2>nul
 
-javac -d bin -cp ".;C:\Users\kylek\OneDrive\Desktop\Coral_Vision\opencv\build\java\opencv-4120.jar" Main.java CardCleaner.java
+javac -d bin -cp ".;C:\Users\kylek\OneDrive\Desktop\Coral_Vision\opencv\build\java\opencv-4120.jar" Main.java CardCleaner.java CardLightingNormalizer.java LabelCoral.java LabelAlgae.java LabelSilt.java LabelShadow.java
+
 if errorlevel 1 (
     echo.
     echo Compile failed.
@@ -34,14 +35,15 @@ for %%F in (input\*.jpg input\*.jpeg input\*.png input\*.tif input\*.tiff) do (
 if not defined INPUT_ARGS (
     echo.
     echo No input images found in the input folder.
-    echo Put cropped card images into:
-    echo   C:\Users\kylek\OneDrive\Desktop\Coral_Vision\card_cleaner\input
+    echo Put input images into:
+    echo   C:\Users\kylek\OneDrive\Desktop\Coral_Vision\preprocessor\input
     echo.
     pause
     exit /b 1
 )
 
 java -cp "bin;C:\Users\kylek\OneDrive\Desktop\Coral_Vision\opencv\build\java\opencv-4120.jar" Main output !INPUT_ARGS!
+
 if errorlevel 1 (
     echo.
     echo Run failed.
