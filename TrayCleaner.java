@@ -13,7 +13,7 @@ public class TrayCleaner {
 
         // STEP 1:
         // CLAHE + white balance happen in their own file.
-        Mat claheWhiteBalanced = CardLightingNormalizer.claheLabThenWhiteBalance(warpedRaw);
+        Mat claheWhiteBalanced = TrayLightingNormalizer.claheLabThenWhiteBalance(warpedRaw);
 
         char[][] labels = new char[rows][cols];
 

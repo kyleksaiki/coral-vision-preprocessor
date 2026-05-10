@@ -84,10 +84,10 @@ public class LabelCoral {
     private static final int OLIVE_H_MAX = 95;
     private static final int OLIVE_S_MIN = 12;
 
-    // Bright white card / tag rejection.
-    private static final int CARD_L_MIN = 210;
-    private static final int CARD_V_MIN = 225;
-    private static final int CARD_S_MAX = 60;
+    // Bright white tray / tag rejection.
+    private static final int TRAY_L_MIN = 210;
+    private static final int TRAY_V_MIN = 225;
+    private static final int TRAY_S_MAX = 60;
 
     // Bright red/orange junk rejection, such as ruler / tags.
     private static final int JUNK_L_MIN = 165;
@@ -167,7 +167,7 @@ public class LabelCoral {
             return false;
         }
 
-        if (isBrightCardLike(l, s, v)) {
+        if (isBrightTrayLike(l, s, v)) {
             return false;
         }
 
@@ -247,10 +247,10 @@ public class LabelCoral {
         return labGreen || hsvGreen || bgrGreen || oliveGreen;
     }
 
-    private static boolean isBrightCardLike(int l, int s, int v) {
-        return l >= CARD_L_MIN &&
-                v >= CARD_V_MIN &&
-                s <= CARD_S_MAX;
+    private static boolean isBrightTrayLike(int l, int s, int v) {
+        return l >= TRAY_L_MIN &&
+                v >= TRAY_V_MIN &&
+                s <= TRAY_S_MAX;
     }
 
     private static boolean isBrightRedOrangeJunk(int l, int a, int b, int h, int s, int v) {
