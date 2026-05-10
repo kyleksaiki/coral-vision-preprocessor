@@ -33,9 +33,11 @@ It then creates a cleaned output image by removing unwanted material and replaci
 ## Run
 
 Download openCV Java `.jar`
+https://opencv.org/releases
 
-This link might be useful:
-https://repo.maven.apache.org/maven2/org/openpnp/opencv/4.9.0-0/ 
+Insert file path to opencv.jar in .vscode/settings.json
+
+Update filepaths in run.bat to your local instance (optional)
 
 Pass an output folder first, then one or more cropped card images:
 
