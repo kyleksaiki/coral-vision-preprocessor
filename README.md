@@ -27,8 +27,6 @@ It then creates a cleaned output image by removing unwanted material and replaci
 - `LabelCoral.java` – coral labeling
 - `LabelAlgae.java` – algae labeling
 - `LabelSilt.java` – silt labeling
-- `LabelShadow.java` – shadow labeling
-- `BackgroundColorEstimator.java` – background color estimation
 
 ## Run
 
