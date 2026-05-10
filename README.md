@@ -30,9 +30,9 @@ https://opencv.org/releases
 
 Insert file path to opencv.jar in .vscode/settings.json
 
-Update filepaths in run.bat to your local instance (optional)
+Update filepaths in run.bat to your local instance 
 
-Pass an output folder first, then one or more cropped card images:
+type .\run.bat in terminal to compile and run program
 
 ```bash
-java -Djava.library.path=/path/to/opencv/native -cp .:opencv-4xx.jar Main <output-dir> <card1> <card2> ...
+
