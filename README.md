@@ -1,6 +1,6 @@
 # coral-vision-preprocessor
 
-Small Java + OpenCV project for preprocessing already-cropped coral card images.
+Small Java + OpenCV project for preprocessing coral card images.
 
 ## What it does
 
@@ -21,8 +21,9 @@ It then creates a cleaned output image by removing unwanted material and replaci
 
 ## Files
 
-- `Main.java` – batch runner
-- `CardCleaner.java` – main pipeline
+- `Main.java` – batch runner and command-line entry point
+- `TrayCleaner.java` – main processing pipeline
+- `TrayLightingNormalizer.java` - CLAHE and white-balancing preprocessing
 - `LabelCoral.java` – coral labeling
 - `LabelAlgae.java` – algae labeling
 - `LabelSilt.java` – silt labeling
@@ -30,6 +31,8 @@ It then creates a cleaned output image by removing unwanted material and replaci
 - `BackgroundColorEstimator.java` – background color estimation
 
 ## Run
+
+Download openCV Java `.jar`
 
 Pass an output folder first, then one or more cropped card images:
 
