@@ -4,7 +4,7 @@ Small Java + OpenCV project for preprocessing coral card images.
 
 ## What it does
 
-Given a single cropped card image, the pipeline labels pixels as:
+Given a tray of cards, the pipeline labels pixels as:
 
 - `C` / `c` = coral
 - `A` / `a` = algae
@@ -12,12 +12,7 @@ Given a single cropped card image, the pipeline labels pixels as:
 - `H` / `h` = shadow
 - `.` = unlabeled
 
-It then creates a cleaned output image by removing unwanted material and replacing it with an estimated card background color.
-
-## Notes
-
-
-- Main color logic is based in **Lab** color space.
+It then creates a cleaned output image by removing unwanted pixels.
 
 ## Files
 
