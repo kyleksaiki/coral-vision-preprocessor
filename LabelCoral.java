@@ -5,6 +5,27 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Labels coral-like pixels in an image using BGR, Lab, and HSV color checks.
+ *
+ * <p>This class is tuned to find brown, dark brown, and black-brown coral regions
+ * while rejecting common false positives such as green algae, bright tray areas,
+ * white tags, and bright red/orange objects.</p>
+ *
+ * <p>The labeling process has two main stages:</p>
+ *
+ * <ol>
+ *   <li>Detect pixels that match acceptable coral color rules and label them as {@code 'C'}.</li>
+ *   <li>Remove small connected coral components that are likely false positives.</li>
+ * </ol>
+ *
+ * <p>Label meanings used by this class:</p>
+ *
+ * <ul>
+ *   <li>{@code 'C'} = coral pixel</li>
+ *   <li>{@code '.'} = removed / background pixel</li>
+ * </ul>
+ */
 public class LabelCoral {
 
     // Only connected coral blobs with at least this many pixels are kept.
@@ -17,7 +38,9 @@ public class LabelCoral {
 
     // Light / medium brown coral.
     private static final int WARM_L_MAX = 195;
+
     private static final int WARM_V_MAX = 238;
+
     private static final int WARM_A_MIN = 129;
     private static final int WARM_A_MAX = 166;
     private static final int WARM_B_MIN = 122;
@@ -98,6 +121,24 @@ public class LabelCoral {
     private static final int JUNK_H_HIGH_MIN = 170;
     private static final int JUNK_S_MIN = 70;
 
+    /**
+     * Labels coral pixels in the given label grid.
+     *
+     * <p>The input image is evaluated in three color spaces:</p>
+     *
+     * <ul>
+     *   <li>BGR, for direct blue/green/red channel comparisons</li>
+     *   <li>Lab, for brightness and perceptual color separation</li>
+     *   <li>HSV, for hue, saturation, and value checks</li>
+     * </ul>
+     *
+     * <p>Pixels that pass coral color checks are labeled as {@code 'C'}.
+     * After initial labeling, small connected coral components are removed.</p>
+     *
+     * @param bgrImage OpenCV image in BGR color format
+     * @param labels existing label grid to update; dimensions should match the image
+     * @return the same {@code labels} array after coral pixels have been labeled
+     */
     public static char[][] labelCoralPixels(Mat bgrImage, char[][] labels) {
 
         Mat lab = new Mat();
@@ -158,6 +199,25 @@ public class LabelCoral {
         return labels;
     }
 
+    /**
+     * Determines whether a pixel should be accepted as coral brown.
+     *
+     * <p>This method first rejects pixels that look like green algae, bright tray/tag
+     * material, or bright red/orange junk. If the pixel is not rejected, it is tested
+     * against warm brown, dark brown, and black-brown coral rules.</p>
+     *
+     * @param l Lab L-channel value
+     * @param a Lab a-channel value
+     * @param b Lab b-channel value
+     * @param h HSV hue value
+     * @param s HSV saturation value
+     * @param v HSV value/brightness value
+     * @param blue BGR blue channel value
+     * @param green BGR green channel value
+     * @param red BGR red channel value
+     * @return {@code true} if the pixel matches coral-brown rules;
+     *         {@code false} otherwise
+     */
     private static boolean isCoralBrown(
             int l, int a, int b,
             int h, int s, int v,
@@ -217,6 +277,25 @@ public class LabelCoral {
                 || (blackBrownLab && blackBrownBgr);
     }
 
+    /**
+     * Determines whether a pixel looks like green or olive algae.
+     *
+     * <p>This is a rejection check used before coral detection. It combines Lab,
+     * HSV, and BGR rules to identify greenish or olive pixels that should not be
+     * labeled as coral.</p>
+     *
+     * @param l Lab L-channel value
+     * @param a Lab a-channel value
+     * @param b Lab b-channel value
+     * @param h HSV hue value
+     * @param s HSV saturation value
+     * @param v HSV value/brightness value
+     * @param blue BGR blue channel value
+     * @param green BGR green channel value
+     * @param red BGR red channel value
+     * @return {@code true} if the pixel appears algae-like;
+     *         {@code false} otherwise
+     */
     private static boolean isGreenishAlgaeLike(
             int l, int a, int b,
             int h, int s, int v,
@@ -247,12 +326,39 @@ public class LabelCoral {
         return labGreen || hsvGreen || bgrGreen || oliveGreen;
     }
 
+    /**
+     * Determines whether a pixel looks like a bright tray, label, or tag area.
+     *
+     * <p>These areas are usually very bright and low in saturation, so they are
+     * rejected before coral-brown detection.</p>
+     *
+     * @param l Lab L-channel value
+     * @param s HSV saturation value
+     * @param v HSV value/brightness value
+     * @return {@code true} if the pixel appears tray-like;
+     *         {@code false} otherwise
+     */
     private static boolean isBrightTrayLike(int l, int s, int v) {
         return l >= TRAY_L_MIN &&
                 v >= TRAY_V_MIN &&
                 s <= TRAY_S_MAX;
     }
 
+    /**
+     * Determines whether a pixel looks like bright red/orange non-coral material.
+     *
+     * <p>This rejects bright, saturated, warm-colored objects such as rulers,
+     * labels, or tags that could otherwise be confused with coral.</p>
+     *
+     * @param l Lab L-channel value
+     * @param a Lab a-channel value
+     * @param b Lab b-channel value
+     * @param h HSV hue value
+     * @param s HSV saturation value
+     * @param v HSV value/brightness value
+     * @return {@code true} if the pixel appears to be bright red/orange junk;
+     *         {@code false} otherwise
+     */
     private static boolean isBrightRedOrangeJunk(int l, int a, int b, int h, int s, int v) {
         boolean bright = l >= JUNK_L_MIN ||
                 v >= JUNK_V_MIN;
@@ -268,6 +374,16 @@ public class LabelCoral {
         return bright && veryWarm && redOrangeHue && saturated;
     }
 
+    /**
+     * Removes small connected coral components from the label grid.
+     *
+     * <p>This method searches for connected groups of {@code 'C'} pixels using
+     * an 8-connected neighborhood. If a group is smaller than
+     * {@link #MIN_COMPONENT_PIXELS}, all pixels in that group are reset to
+     * {@code '.'}.</p>
+     *
+     * @param labels label grid containing coral pixels marked as {@code 'C'}
+     */
     private static void filterSmallCoralComponents(char[][] labels) {
         int rows = labels.length;
         int cols = labels[0].length;
