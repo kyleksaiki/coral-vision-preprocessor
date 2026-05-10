@@ -34,6 +34,9 @@ It then creates a cleaned output image by removing unwanted material and replaci
 
 Download openCV Java `.jar`
 
+This link might be useful:
+https://repo.maven.apache.org/maven2/org/openpnp/opencv/4.9.0-0/ 
+
 Pass an output folder first, then one or more cropped card images:
 
 ```bash
