@@ -9,59 +9,46 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Normalizes tray image lighting before coral, algae, and silt labeling.
+ * Normalizes tray image lighting before downstream processing.
  *
- * <p>This class applies a simple preprocessing pipeline intended to make later
- * color-threshold-based labelers more stable across uneven lighting conditions.</p>
- *
- * <p>The normalization pipeline is:</p>
- *
+ * <p>Pipeline:</p>
  * <ol>
- *   <li>Apply a small Gaussian blur to reduce local noise.</li>
  *   <li>Apply CLAHE to the Lab L channel to improve local contrast.</li>
  *   <li>Apply gray-world white balance in BGR space.</li>
  * </ol>
  *
- * <p>All methods expect OpenCV images in BGR format, which is OpenCV's default
- * color channel order.</p>
+ * <p>(The old Gaussian pre-blur was removed: the models resize the image by ~4x, which blurs
+ * far more than a 5x5 Gaussian, so the pre-blur added nothing for the learned path.)</p>
+ *
+ * <p>All methods expect OpenCV images in BGR format.</p>
  */
 public class TrayLightingNormalizer {
 
     /**
-     * Applies the full tray lighting normalization pipeline.
-     *
-     * <p>The input image is first blurred slightly, then contrast-enhanced using
-     * CLAHE in Lab color space, and finally white-balanced using a gray-world
-     * channel scaling method.</p>
+     * Applies CLAHE (Lab L channel) followed by gray-world white balance.
      *
      * @param bgr input image in BGR color format
-     * @return normalized BGR image after blur, CLAHE, and white balance
+     * @return normalized BGR image
      */
     public static Mat claheLabThenWhiteBalance(Mat bgr) {
-        // CLAHE in LAB (no pre-blur; the downstream model resizes ~4x, which blurs more
-        // than a 5x5 Gaussian ever did, and the labelers work fine without it).
+        // CLAHE in LAB (no pre-blur).
         Mat claheLab = applyClaheLab(bgr);
 
         // Gray-world white balance after CLAHE.
         Mat whiteBalanced = whiteBalancedBgr(claheLab);
 
+        claheLab.release();
         return whiteBalanced;
     }
 
     /**
      * Applies CLAHE contrast enhancement to the L channel of a Lab image.
      *
-     * <p>The image is converted from BGR to Lab. The Lab color space separates
-     * brightness from color, so this method enhances only the L channel while
-     * leaving the a and b color channels unchanged. The channels are then merged
-     * and converted back to BGR.</p>
-     *
      * @param bgr input image in BGR color format
      * @return BGR image after CLAHE has been applied to the Lab L channel
      */
     private static Mat applyClaheLab(Mat bgr) {
         Mat lab = new Mat();
-
         Imgproc.cvtColor(bgr, lab, Imgproc.COLOR_BGR2Lab);
 
         List<Mat> channels = new ArrayList<>(3);
@@ -87,26 +74,23 @@ public class TrayLightingNormalizer {
         Mat claheBgr = new Mat();
         Imgproc.cvtColor(mergedLab, claheBgr, Imgproc.COLOR_Lab2BGR);
 
+        lab.release();
+        l.release();
+        a.release();
+        b.release();
+        lClahe.release();
+        mergedLab.release();
         return claheBgr;
     }
 
     /**
      * Applies gray-world white balance to a BGR image.
      *
-     * <p>The gray-world assumption treats the average color of the scene as neutral
-     * gray. This method computes the mean value of each BGR channel, computes the
-     * overall average channel mean, and scales each channel so its mean moves toward
-     * that shared average.</p>
-     *
-     * <p>The image is temporarily converted to 32-bit float so the channel scaling
-     * can be performed accurately, then converted back to 8-bit BGR output.</p>
-     *
      * @param bgr input image in BGR color format
      * @return white-balanced BGR image
      */
     private static Mat whiteBalancedBgr(Mat bgr) {
         Mat floatImg = new Mat();
-
         bgr.convertTo(floatImg, CvType.CV_32F);
 
         List<Mat> channels = new ArrayList<>(3);
@@ -141,6 +125,11 @@ public class TrayLightingNormalizer {
         Mat whiteBalanced = new Mat();
         balancedFloat.convertTo(whiteBalanced, CvType.CV_8UC3);
 
+        floatImg.release();
+        b.release();
+        g.release();
+        r.release();
+        balancedFloat.release();
         return whiteBalanced;
     }
 }
