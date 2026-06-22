@@ -1,0 +1,16 @@
+# ---------------------------------------------------------------------------
+# PyTorch is NOT listed here on purpose.
+# Install it matched to your machine: https://pytorch.org/get-started/locally/
+# On Google Colab, torch + torchvision are ALREADY installed -- do not reinstall.
+# torch >= 2.2 is fine for everything here.
+# ---------------------------------------------------------------------------
+
+segmentation-models-pytorch==0.5.0
+albumentations==2.0.8
+
+opencv-python-headless>=4.10
+numpy>=1.26,<3
+pyyaml>=6.0
+tqdm>=4.66
+onnx>=1.16
+onnxruntime>=1.18          # also used by make_card_crops.py to run the card model

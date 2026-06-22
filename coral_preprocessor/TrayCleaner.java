@@ -26,8 +26,9 @@ import java.util.List;
  *   Stitch the per-card coral masks back together, AND with cardMask  -->  coralMask
  *                                                                           255 = coral, on cards only
  *
- *   coralMask --> drop "light purple" (coral on bright pixels = false positives) --> coralMask
- *   coralMask --> CoralMaskGrower (grow into similar-colored edge pixels)        --> coralMaskGrown
+ *   Per card: if that card contains DARK coral, drop its bright ("light purple") pixels as
+ *             false positives. Cards whose coral is light are left alone (light coral is real).
+ *   coralMask --> CoralMaskGrower (grow into similar-colored edge pixels) --> coralMaskGrown
  * </pre>
  *
  * <p>Why crop per card: the coral model runs on a single card instead of the whole tray, so
@@ -52,15 +53,29 @@ public class TrayCleaner {
     /** Pad each card crop by this fraction of its larger side, so coral at the edge isn't clipped. */
     private static final double CROP_PAD_FRAC = 0.03;
 
-    // ===================== TUNING: "light purple" removal =====================
+    // ============ TUNING: dark-vs-light coral, and the "light purple" removal ============
+    // Light coral and dark coral never share a card. So we only remove bright ("light purple")
+    // coral on cards that actually contain DARK coral; on all-light-coral cards we keep everything.
+
+    /** A coral pixel counts as DARK coral when its CLAHE background grayscale is <= this (0–255). */
+    private static final int DARK_CORAL_MAX_BRIGHTNESS = 110;
+
     /**
-     * Coral pixels sitting on a background BRIGHTER than this (0–255 grayscale of the CLAHE image)
-     * are dropped from the mask. In the overlay these show up as the pale / "light purple" regions,
-     * which are false positives. LOWER = more aggressive (removes more light coral); HIGHER =
-     * removes less. Set to 255 to disable the filter entirely.
+     * A card is treated as a DARK-CORAL card when at least this fraction of its coral pixels are
+     * dark. Because light/dark coral never mix on one card, this fraction is near 0 on a light
+     * card and high on a dark card, so the exact value isn't sensitive. RAISE it if a light card
+     * is wrongly treated as dark; LOWER it if a dark card isn't being recognized.
+     */
+    private static final double DARK_CORAL_MIN_FRACTION = 0.15;
+
+    /**
+     * On DARK-CORAL cards only, coral pixels whose CLAHE background grayscale is brighter than
+     * this are dropped (the pale "light purple" false positives). LOWER = more aggressive;
+     * HIGHER = removes less. Set to 255 to disable removal entirely. Light-coral cards are never
+     * touched regardless of this value.
      */
     private static final int CORAL_MAX_BRIGHTNESS = 150;
-    // ==========================================================================
+    // =====================================================================================
 
     /**
      * Runs the pipeline and returns the 6 output images.
@@ -80,10 +95,9 @@ public class TrayCleaner {
         // ---- STEP 3: card-model mask, visualized on the normalized image. ----
         Mat card = CardFinder.renderCardOverlay(clahe, cardMask);          // image 3: card
 
-        // ---- STEP 4: coral mask = coral model run on each card crop, gated to the cards. ----
+        // ---- STEP 4: coral mask = coral model per card crop, gated to cards, then the per-card
+        //              "light purple" removal (only on cards that have dark coral). ----
         Mat coralMask = buildCoralMask(clahe, cardMask, coralFinder);
-        // Drop the "light purple" false positives (coral the model placed on bright pixels).
-        //dropBrightCoral(clahe, coralMask);
         Mat coral = renderCoralOverlay(clahe, coralMask);                  // image 4: coral
 
         // ---- STEP 5: grow the coral mask into similar-colored edge pixels, then overlay it. ----
@@ -110,39 +124,13 @@ public class TrayCleaner {
     }
 
     /**
-     * Removes "light purple" coral from {@code coralMask} in place: any coral pixel whose CLAHE
-     * background is brighter than {@link #CORAL_MAX_BRIGHTNESS} (grayscale) is cleared. Those pale
-     * regions are false positives. Tune the threshold via {@link #CORAL_MAX_BRIGHTNESS}.
-     */
-    private static void dropBrightCoral(Mat clahe, Mat coralMask) {
-        if (CORAL_MAX_BRIGHTNESS >= 255) {
-            return; // filter disabled
-        }
-        Mat gray = new Mat();
-        Imgproc.cvtColor(clahe, gray, Imgproc.COLOR_BGR2GRAY);
-
-        int nPix = coralMask.rows() * coralMask.cols();
-        byte[] g = new byte[nPix];
-        gray.get(0, 0, g);
-        gray.release();
-
-        byte[] m = new byte[nPix];
-        coralMask.get(0, 0, m);
-        for (int p = 0; p < nPix; p++) {
-            if (m[p] != 0 && (g[p] & 0xFF) > CORAL_MAX_BRIGHTNESS) {
-                m[p] = 0; // too bright to be real coral -> drop it
-            }
-        }
-        coralMask.put(0, 0, m);
-    }
-
-    /**
      * Builds the full-resolution coral mask by running the coral model on each card crop.
      *
      * <p>For every card blob in {@code cardMask}: take its bounding box (padded a little), crop
      * that region out of the CLAHE image, run the coral model on the crop, and OR the result
-     * into the full-size coral mask. Finally AND with the card mask so coral lives only on cards
-     * (rectangular crops can include mesh/neighbor pixels; this clips them).</p>
+     * into the full-size coral mask. Then AND with the card mask so coral lives only on cards
+     * (rectangular crops can include mesh/neighbor pixels; this clips them). Finally, apply the
+     * per-card "light purple" removal (see {@link #removeBrightCoralOnDarkCards}).</p>
      *
      * <p>Touching cards that the card model merged into one blob become one larger crop &mdash;
      * still correct, just with less of the per-card resolution benefit for those.</p>
@@ -197,10 +185,89 @@ public class TrayCleaner {
         // rectangular crops may have included.
         Core.bitwise_and(coralMask, cardMask, coralMask);
 
+        // Per-card "light purple" removal, gated on whether the card has dark coral.
+        removeBrightCoralOnDarkCards(clahe, coralMask, labels, n);
+
         labels.release();
         stats.release();
         centroids.release();
         return coralMask;
+    }
+
+    /**
+     * Removes the pale "light purple" false-positive coral, but ONLY on cards that actually
+     * contain dark coral. Light coral and dark coral never share a card, so:
+     *
+     * <ul>
+     *   <li>If a card's coral is mostly dark (a dark-coral card), its bright coral pixels are
+     *       false positives and get dropped.</li>
+     *   <li>If a card has no meaningful dark coral (a light-coral card), nothing is removed &mdash;
+     *       the whole pale colony is real and kept.</li>
+     * </ul>
+     *
+     * <p>Operates in place on {@code coralMask}. Thresholds are the TUNING constants above.</p>
+     *
+     * @param cardLabels CV_32S connected-component labels of the card mask (0 = background)
+     * @param nCards     number of components (0..nCards-1) from connectedComponentsWithStats
+     */
+    private static void removeBrightCoralOnDarkCards(Mat clahe, Mat coralMask, Mat cardLabels, int nCards) {
+        if (CORAL_MAX_BRIGHTNESS >= 255) {
+            return; // removal disabled
+        }
+
+        int nPix = coralMask.rows() * coralMask.cols();
+
+        Mat gray = new Mat();
+        Imgproc.cvtColor(clahe, gray, Imgproc.COLOR_BGR2GRAY);
+        byte[] g = new byte[nPix];
+        gray.get(0, 0, g);
+        gray.release();
+
+        int[] lab = new int[nPix];
+        cardLabels.get(0, 0, lab);
+
+        byte[] m = new byte[nPix];
+        coralMask.get(0, 0, m);
+
+        // Pass A: per card, count coral pixels and how many of them are dark.
+        long[] coralCount = new long[nCards];
+        long[] darkCount = new long[nCards];
+        for (int p = 0; p < nPix; p++) {
+            if (m[p] == 0) {
+                continue;
+            }
+            int card = lab[p];
+            if (card <= 0) {
+                continue; // coral is gated to cards, but stay safe
+            }
+            coralCount[card]++;
+            if ((g[p] & 0xFF) <= DARK_CORAL_MAX_BRIGHTNESS) {
+                darkCount[card]++;
+            }
+        }
+
+        // Decide which cards are dark-coral cards (enough of their coral is dark).
+        boolean[] darkCard = new boolean[nCards];
+        for (int c = 1; c < nCards; c++) {
+            darkCard[c] = coralCount[c] > 0
+                    && darkCount[c] >= DARK_CORAL_MIN_FRACTION * coralCount[c];
+        }
+
+        // Pass B: on dark-coral cards only, drop coral pixels that are too bright.
+        boolean changed = false;
+        for (int p = 0; p < nPix; p++) {
+            if (m[p] == 0) {
+                continue;
+            }
+            int card = lab[p];
+            if (card > 0 && darkCard[card] && (g[p] & 0xFF) > CORAL_MAX_BRIGHTNESS) {
+                m[p] = 0;
+                changed = true;
+            }
+        }
+        if (changed) {
+            coralMask.put(0, 0, m);
+        }
     }
 
     /**
@@ -323,7 +390,7 @@ public class TrayCleaner {
         public Mat rawInput;            // 1: raw
         public Mat claheWhiteBalanced;  // 2: CLAHE + white balance (or raw, on fallback)
         public Mat card;                // 3: card-model mask overlay
-        public Mat coral;               // 4: coral-model mask overlay (after light-purple removal)
+        public Mat coral;               // 4: coral-model mask overlay (after per-card bright removal)
         public Mat coralGrown;          // 5: overlay of the edge-grown mask
         public Mat cleaned;             // 6: on-card non-coral wiped to white, coral preserved (grown)
         public Mat cardMask;            // CV_8UC1: 255 = card  (from the card model)

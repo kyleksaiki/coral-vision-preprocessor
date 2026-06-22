@@ -1,0 +1,43 @@
+# ===========================================================================
+# Coral-segmentation config. Mirrors the card config, with two key differences:
+#   1. It trains on CLAHE CARD CROPS (made by make_card_crops.py), not whole trays.
+#   2. Square input (768x768), which MUST match CoralFinderOnnx.java IN_W / IN_H.
+# ===========================================================================
+
+data:
+  images_dir: data/images        # CLAHE card CROPS exported from Roboflow (.jpg)
+  masks_dir:  data/masks         # one binary PNG per crop: <same name>.png, 255 = coral
+  image_glob: "*.jpg"
+
+  # --- Split by TRAY, never by random crop --------------------------------
+  # Crops are named <traystem>_cardNN.jpg, so the tray id is the letters+digits
+  # at the start of the name (e.g. tray03). All crops from one tray stay in the
+  # same split, so the model can't "memorize" a tray and fake a high score.
+  val_frac:  0.15
+  test_frac: 0.15
+  val_dives:  []                 # e.g. ["tray03"] to pin specific trays to val
+  test_dives: []                 # e.g. ["tray07"] to pin specific trays to test
+
+train:
+  # 768x768 square. MUST equal CoralFinderOnnx IN_W/IN_H and the export_onnx size.
+  # Both divisible by 32 (U-Net needs that). Crops are small, so this UPSCALES most
+  # cards slightly -- that's the whole point: coral texture survives instead of being
+  # crushed by a 4x tray downscale.
+  img_height: 768
+  img_width:  768
+  batch_size: 8                  # crops are small; drop to 4 if you run out of GPU memory
+  epochs:     80
+  lr:         0.0003
+  weight_decay: 0.0001
+  early_stop_patience: 15
+  num_workers: 2
+  seed: 42
+
+model:
+  encoder: resnet34
+  encoder_weights: imagenet
+
+output:
+  ckpt_dir: checkpoints
+  pred_dir: outputs/predictions
+  num_qualitative: 16

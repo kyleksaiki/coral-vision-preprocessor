@@ -1,0 +1,11 @@
+# Ignore all image files anywhere in the project
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.tif
+*.gif
+
+# (Optional) If your 'input' folder is purely for local test images, 
+# you can ignore the entire folder by uncommenting the line below:
+# input/
