@@ -40,13 +40,12 @@ import java.util.List;
  * <p>Outputs (6):
  * 1 raw, 2 clahe, 3 card (card-model overlay), 4 coral (coral-model overlay),
  * 5 coral grown (overlay of the edge-grown mask),
- * 6 cleaned (on-card non-coral wiped to white, coral preserved, using the GROWN mask).</p>
+ * 6 cleaned (on-card junk removed via clean-card background reconstruction, coral preserved).</p>
  */
 public class TrayCleaner {
 
     // Colors in OpenCV BGR order.
     private static final int[] CORAL_FILL = {128, 0, 128};   // purple coral tint for the overlay
-    private static final int[] DIM_WHITE  = {220, 220, 220}; // "cleaned plastic" fill
 
     /** Skip card-mask blobs smaller than this fraction of the image (noise specks). */
     private static final double CARD_AREA_FRAC_MIN = 0.001;
@@ -105,10 +104,11 @@ public class TrayCleaner {
         Mat coralMaskGrown = CoralMaskGrower.grow(clahe, coralMask, cardMask);
         Mat coralGrown = renderCoralOverlay(clahe, coralMaskGrown);        // image 5: coral grown
 
-        // ---- STEP 6: cleaned = wipe on-card non-coral to white, keep coral. ----
-        // Uses the GROWN mask so the recovered edge coral is preserved in the deliverable.
+        // ---- STEP 6: cleaned = remove on-card junk by reconstructing clean-card background. ----
+        // Junk (algae/silt/brown/halo) is filled from nearby clean-card pixels; coral is kept.
+        // Uses the GROWN mask so the recovered edge coral is preserved. See CardJunkCleaner.
         // (To clean with the un-grown mask instead, pass `coralMask` here.)
-        Mat cleaned = renderCleaned(clahe, cardMask, coralMaskGrown);      // image 6: cleaned
+        Mat cleaned = CardJunkCleaner.renderCleaned(clahe, cardMask, coralMaskGrown); // image 6: cleaned
 
         TrayResult result = new TrayResult();
         result.rawInput = raw.clone();
@@ -347,44 +347,6 @@ public class TrayCleaner {
         return out;
     }
 
-    /**
-     * Image 6: the cleaned tray. Inside the card mask, every non-coral pixel is wiped to dim
-     * white (clean plastic); coral pixels keep their real color. Off-card pixels are left as the
-     * normalized background for context.
-     *
-     * <p>{@code coralMask} here is normally the GROWN mask (see {@link #processTray}), so coral
-     * the grow step recovered at the edges is preserved.</p>
-     */
-    private static Mat renderCleaned(Mat clahe, Mat cardMask, Mat coralMask) {
-        Mat out = clahe.clone();
-        int rows = out.rows();
-        int cols = out.cols();
-        int ch = out.channels();
-
-        byte[] pix = new byte[(int) (out.total() * ch)];
-        out.get(0, 0, pix);
-        byte[] card = new byte[rows * cols];
-        cardMask.get(0, 0, card);
-        byte[] coral = new byte[rows * cols];
-        coralMask.get(0, 0, coral);
-
-        int i = 0;
-        int p = 0;
-        for (int r = 0; r < rows; r++) {
-            for (int c = 0; c < cols; c++, i += ch, p++) {
-                boolean onCard = card[p] != 0;
-                boolean isCoral = coral[p] != 0;
-                if (onCard && !isCoral) {
-                    pix[i] = (byte) DIM_WHITE[0];
-                    pix[i + 1] = (byte) DIM_WHITE[1];
-                    pix[i + 2] = (byte) DIM_WHITE[2];
-                }
-            }
-        }
-        out.put(0, 0, pix);
-        return out;
-    }
-
     /** The 6 pipeline outputs plus the binary masks. */
     public static class TrayResult {
         public Mat rawInput;            // 1: raw
@@ -392,7 +354,7 @@ public class TrayCleaner {
         public Mat card;                // 3: card-model mask overlay
         public Mat coral;               // 4: coral-model mask overlay (after per-card bright removal)
         public Mat coralGrown;          // 5: overlay of the edge-grown mask
-        public Mat cleaned;             // 6: on-card non-coral wiped to white, coral preserved (grown)
+        public Mat cleaned;             // 6: on-card junk removed (clean-card bg reconstruction), coral kept
         public Mat cardMask;            // CV_8UC1: 255 = card  (from the card model)
         public Mat coralMask;           // CV_8UC1: 255 = coral (coral model, gated to cards, filtered)
         public Mat coralMaskGrown;      // CV_8UC1: 255 = coral (after edge growth)
